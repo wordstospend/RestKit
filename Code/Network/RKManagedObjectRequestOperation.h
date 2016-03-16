@@ -172,6 +172,8 @@
  **Default**: `YES`
  */
 @property (nonatomic, assign) BOOL savesToPersistentStore;
+// default YES;
+@property (nonatomic, assign) BOOL saveContextOnCompletion;
 
 /**
  Sets a block to be invoked just before the operation saves the private mapping context.

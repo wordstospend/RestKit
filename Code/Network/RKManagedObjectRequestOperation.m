@@ -461,6 +461,7 @@ BOOL RKDoesArrayOfResponseDescriptorsContainOnlyEntityMappings(NSArray *response
     self = [super initWithHTTPRequestOperation:requestOperation responseDescriptors:responseDescriptors];
     if (self) {
         self.savesToPersistentStore = YES;
+        self.saveContextOnCompletion = YES;
         self.deletesOrphanedObjects = YES;
         self.cachedResponse = [[NSURLCache sharedURLCache] cachedResponseForRequest:requestOperation.request];
     }
@@ -523,12 +524,17 @@ BOOL RKDoesArrayOfResponseDescriptorsContainOnlyEntityMappings(NSArray *response
             }
         }];
         
-        // Create a private context
-        NSManagedObjectContext *privateContext = [[NSManagedObjectContext alloc] initWithConcurrencyType:NSPrivateQueueConcurrencyType];
-        [privateContext setParentContext:managedObjectContext];
-        [privateContext setMergePolicy:NSMergeByPropertyStoreTrumpMergePolicy];
-
-        self.privateContext = privateContext;
+        if (self.saveContextOnCompletion) {
+            // Create a private context
+            NSManagedObjectContext *privateContext = [[NSManagedObjectContext alloc] initWithConcurrencyType:NSPrivateQueueConcurrencyType];
+            [privateContext setParentContext:managedObjectContext];
+            [privateContext setMergePolicy:NSMergeByPropertyStoreTrumpMergePolicy];
+            
+            self.privateContext = privateContext;
+        }
+        else {
+            self.privateContext = self.managedObjectContext;
+        }
     } else {
         self.privateContext = nil;
     }
@@ -837,29 +843,30 @@ BOOL RKDoesArrayOfResponseDescriptorsContainOnlyEntityMappings(NSArray *response
 
 - (BOOL)saveContext:(NSError **)error
 {
-    if (self.willSaveMappingContextBlock) {
-        self.mappingResult = _responseMapperOperation.mappingResult;
+    if ([self saveContextOnCompletion]) {
+        if (self.willSaveMappingContextBlock) {
+            self.mappingResult = _responseMapperOperation.mappingResult;
+            [self.privateContext performBlockAndWait:^{
+                self.willSaveMappingContextBlock(self.privateContext);
+            }];
+        }
+        
+        __block BOOL hasChanges;
         [self.privateContext performBlockAndWait:^{
-            self.willSaveMappingContextBlock(self.privateContext);
+            hasChanges = [self.privateContext hasChanges];
         }];
+        if (hasChanges) {
+            return [self saveContext:self.privateContext error:error];
+        } else if ([self.targetObject isKindOfClass:[NSManagedObject class]]) {
+            NSManagedObjectContext *context = [(NSManagedObject *)self.targetObject managedObjectContext];
+            __block BOOL isNew = NO;
+            [context performBlockAndWait:^{
+                isNew = [(NSManagedObject *)self.targetObject isNew];
+            }];
+            // Object was like POST'd in an unsaved state and we wish to persist
+            if (isNew) [self saveContext:context error:error];
+        }
     }
-    
-    __block BOOL hasChanges;
-    [self.privateContext performBlockAndWait:^{
-        hasChanges = [self.privateContext hasChanges];
-    }];
-    if (hasChanges) {
-        return [self saveContext:self.privateContext error:error];
-    } else if ([self.targetObject isKindOfClass:[NSManagedObject class]]) {
-        NSManagedObjectContext *context = [(NSManagedObject *)self.targetObject managedObjectContext];
-        __block BOOL isNew = NO;
-        [context performBlockAndWait:^{
-            isNew = [(NSManagedObject *)self.targetObject isNew];
-        }];
-        // Object was like POST'd in an unsaved state and we wish to persist
-        if (isNew) [self saveContext:context error:error];
-    }
-
     return YES;
 }
 
