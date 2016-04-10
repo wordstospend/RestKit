@@ -659,10 +659,15 @@ BOOL RKDoesArrayOfResponseDescriptorsContainOnlyEntityMappings(NSArray *response
         
         // Refetch all managed objects nested at key paths within the results dictionary before returning
         if (mappingResult) {
+            if (weakSelf.saveContextOnCompletion) {
             RKRefetchingMappingResult *refetchingMappingResult = [[RKRefetchingMappingResult alloc] initWithMappingResult:mappingResult
                                                                                                      managedObjectContext:weakSelf.managedObjectContext
                                                                                                               mappingInfo:weakSelf.mappingInfo];
             return completionBlock((RKMappingResult *)refetchingMappingResult, nil);
+            }
+            else {
+                return completionBlock(mappingResult, nil);
+            }
         }
         completionBlock(nil, responseMappingError);
     }];
