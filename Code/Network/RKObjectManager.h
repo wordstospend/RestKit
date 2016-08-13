@@ -887,6 +887,8 @@ RKMappingResult, RKRequestDescriptor, RKResponseDescriptor;
  */
 - (RKPaginator *)paginatorWithPathPattern:(NSString *)pathPattern parameters:(NSDictionary *)parameters;
 
+- (id)mergedParametersWithObject:(id)object method:(RKRequestMethod)method parameters:(NSDictionary *)parameters;
+
 @end
 
 #ifdef _SYSTEMCONFIGURATION_H
